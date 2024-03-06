@@ -1,6 +1,6 @@
 ;;; wordel.el --- An Elisp implementation of "Wordle" (aka "Lingo")  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2022
+;; Copyright (C) 2022-2024  Nicholas Vollmer
 
 ;; Author:  Nicholas Vollmer <iarchivedmywholelife@gmail.com>
 ;; URL: https://github.com/progfolio/wordel
@@ -99,7 +99,7 @@ These are deleted from a puzzle word character."
   "Face for a guessed letter which matches its position in the puzzle word.")
 
 (defface wordel-guessed
-  '((t (:background "#202020")))
+  '((t (:background "#202020" :foreground "#606060")))
   "Face for a guessed letter which has no other hint information.")
 
 (defface wordel-almost
@@ -115,7 +115,7 @@ These are deleted from a puzzle word character."
   "Default face for a wordel letter.")
 
 (defface wordel-spacer
-  '((t (:width ultra-condensed :height 0.1 :background nil)))
+  '((t (:width ultra-condensed :height 0.1)))
   "Face for space between letter boxes.")
 
 (defface wordel-default
@@ -306,12 +306,13 @@ If PROPS are non-nil, they are used in place of default values."
   "Keymap for wordle-mode.")
 
 (define-derived-mode wordel-mode fundamental-mode "Wordel"
-  "A word game based on 'Wordle' and/or 'Lingo'.
+  "A word game based on `Wordle' and/or `Lingo'.
 
     \\{wordel-mode-map}"
   (add-hook 'pre-command-hook #'wordel--filter-inputs nil t)
   (setq header-line-format (wordel--commands-text))
-  (setq-local view-read-only nil)
+  (setq-local show-trailing-whitespace nil
+              view-read-only nil)
   (read-only-mode))
 
 (defvar wordel-select-mode-map (let ((map (make-sparse-keymap)))
@@ -326,7 +327,8 @@ If PROPS are non-nil, they are used in place of default values."
   "Mode to select the type of wordel game to play.
 
     \\{wordel-mode-map}"
-  (setq-local view-read-only nil)
+  (setq-local show-trailing-whitespace nil
+              view-read-only nil)
   (setq header-line-format (wordel--commands-text)))
 
 (defun wordel--letter-info (alphabet)
@@ -374,21 +376,21 @@ If PROPS are non-nil, they are used in place of default values."
 
 (defun wordel--comparison (guess subject)
   "Return propertized GUESS character list compared against SUBJECT."
-  (let* ((subjects (split-string subject "" 'omit-nulls))
-         (guesses  (split-string guess "" 'omit-nulls))
-         (matches  nil))
-    (cl-loop for i from 0 to (1- (length guesses))
-             for g = (nth i guesses)
-             for s = (nth i subjects)
-             collect (propertize g 'hint
-                                 (cond
-                                  ((string-match-p g s)
-                                   (push g matches) 'wordel-correct)
-                                  ((and (string-match-p g subject)
-                                        (not (string-match-p g guess (1+ i)))
-                                        (not (member g matches)))
-                                   'wordel-almost)
-                                  (t 'wordel-guessed))))))
+  (cl-loop with non-matches = (cl-loop for s across subject
+                                       for g across guess
+                                       unless (= g s)
+                                       collect s)
+           for s across subject
+           for g across guess
+           collect (propertize (char-to-string g)
+                               'hint
+                               (if (= g s)
+                                   'wordel-correct
+                                 (if-let ((i (cl-position g non-matches)))
+                                     (progn
+                                       (pop (nthcdr i non-matches))
+                                       'wordel-almost)
+                                   'wordel-guessed)))))
 
 (defun wordel--rules ()
   "Return the rules string."
@@ -479,6 +481,7 @@ If STATE is non-nil, it is used in lieu of `wordel--game'."
   (interactive)
   (let ((b (concat wordel-buffer "<help>")))
     (with-current-buffer (get-buffer-create b)
+      (setq-local show-trailing-whitespace nil)
       (special-mode)
       (with-silent-modifications
         (erase-buffer)
